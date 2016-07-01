@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<head>
+
+</head>
+<body>
+<canvas id="canvas" width="800" height="600"></canvas>
+<script id="vs_s" type="text/plain">
+attribute vec3 po;
+attribute vec3 co;
+uniform mat4 pro;
+uniform mat4 rot;
+uniform mat4 mov;
+varying vec3 co_v;
+
+void main() {
+    co_v = co;
+    gl_Position = pro * mov * rot * vec4(po, 1.0);
+}
+
+
+
+</script>
+<script id="fs_s" type="text/plain">
+varying lowp vec3 co_v;
+
+void main() {
+    gl_FragColor = vec4(co_v, 1);
+}
+
+
+
+</script>
+
+<script>
+  function inheritPrototype(subType, superType) {
+    var prototype = (function (o) {
+      function F() {
+      }
+
+      F.prototype = o;
+      return new F();
+    })(superType.prototype);
+    prototype.constructor = subType;
+    subType.prototype = prototype;
+  }
+
+  /// 矩阵
+  function Matrix(number) {
+    if (typeof number == 'number') {
+      this.matrix = [];
+      this.length = number;
+      for (var x = 0; x < number; x++) {
+        for (var y = 0; y < number; y++) {
+          this.matrix.push(x == y ? 1 : 0);
+        }
+      }
+    } else {
+      if (number instanceof Array) {
+        this.length = Math.sqrt(number.length) | 0;
+        this.matrix = number;
+      }
+    }
+    return this;
+  }
+
+  Matrix.prototype = {
+    // 矩阵相乘
+    multiply: function (matrix) {
+      if (this.length == matrix.length) {
+        var i, j, k, s, container = Array(this.length * this.length);
+        for (i = 0; i < this.length; i++) {
+          for (j = 0; s = 0, j < this.length; j++) {
+            for (k = 0; k < this.length; k++) {
+              s += matrix.matrix[k * this.length + j] * this.matrix[i * this.length + k];
+            }
+            container[i * this.length + j] = s;
+          }
+        }
+        this.matrix = container;
+      }
+      return this;
+    },
+    toArray: function () {
+      return this.matrix;
+    }
+  };
+
+  //// 3D 变换矩阵 extends 矩阵
+  function TransformMatrix3D(number) {
+    if (number && (number == 4 || Math.sqrt(number.length) == 4)) {
+      Matrix.call(this, number);
+    } else if (!number) {
+      Matrix.call(this, 4);
+    }
+  }
+  inheritPrototype(TransformMatrix3D, Matrix);
+
+  // 位移
+  TransformMatrix3D.prototype.translate = function (x, y, z, w) {
+    this.multiply(new TransformMatrix3D([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, x, y, z, w]));
+    return this;
+  };
+
+  // 缩放
+  TransformMatrix3D.prototype.scale = function (x, y, z, w) {
+    this.multiply(new TransformMatrix3D([x, 0, 0, 0, 0, y, 0, 0, 0, 0, z, 0, 0, 0, 0, w]));
+    return this;
+  };
+
+  // X 轴旋转
+  TransformMatrix3D.prototype.rotateX = function (deg, w) {
+    deg = Math.PI * deg / 180;
+    cos = Math.cos(deg);
+    sin = Math.sin(deg);
+    this.multiply(new TransformMatrix3D([1, 0, 0, 0, 0, cos, -sin, 0, 0, sin, cos, 0, 0, 0, 0, w]));
+    return this;
+  };
+
+  // Y 轴旋转
+  TransformMatrix3D.prototype.rotateY = function (deg, w) {
+    deg = Math.PI * deg / 180;
+    cos = Math.cos(deg);
+    sin = Math.sin(deg);
+    this.multiply(new TransformMatrix3D([cos, 0, sin, 0, 0, 1, 0, 0, -sin, 0, cos, 0, 0, 0, 0, w]));
+    return this;
+  };
+
+  // Z 轴旋转
+  TransformMatrix3D.prototype.rotateZ = function (deg, w) {
+    deg = Math.PI * deg / 180;
+    cos = Math.cos(deg);
+    sin = Math.sin(deg);
+    this.multiply(new TransformMatrix3D([cos, -sin, 0, 0, sin, cos, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]));
+    return this;
+  };
+
+  var matrix = new TransformMatrix3D();
+  matrix.scale(2, 2, 2, 1).rotateY(30, 1).rotateX(30, 1);
+  console.log(matrix.toArray());
+  // console.log(matrix.toArray());
+  ////
+
+  var webgl, program, fs, vs, tmp, i, j;
+
+  //获取WebGL对象，并制作着色器程序
+  webgl = canvas.getContext("experimental-webgl");
+  program = webgl.createProgram();
+  vs = webgl.createShader(webgl.VERTEX_SHADER);
+  fs = webgl.createShader(webgl.FRAGMENT_SHADER);
+  webgl.shaderSource(vs, vs_s.textContent);
+  webgl.shaderSource(fs, fs_s.textContent);
+  webgl.compileShader(vs);
+  webgl.compileShader(fs);
+  webgl.attachShader(program, vs);
+  webgl.attachShader(program, fs);
+  webgl.linkProgram(program);
+  webgl.useProgram(program);
+
+  //数据源相关
+  var po, co, dat, buf;
+
+  //获取接口位置，并开启数组模式
+  po = webgl.getAttribLocation(program, "po");
+  co = webgl.getAttribLocation(program, "co");
+  webgl.enableVertexAttribArray(po);
+  webgl.enableVertexAttribArray(co);
+
+  //指定顶点坐标的数据源
+  dat = new Float32Array([
+    -1, -1, 1, 1, -1, 1, 1, 1, 1, -1, 1, 1,
+    -1, -1, -1, 1, -1, -1, 1, 1, -1, -1, 1, -1,
+    -1, -1, -1, -1, 1, -1, -1, 1, 1, -1, -1, 1,
+    1, -1, -1, 1, 1, -1, 1, 1, 1, 1, -1, 1,
+    -1, 1, -1, 1, 1, -1, 1, 1, 1, -1, 1, 1,
+    -1, -1, -1, 1, -1, -1, 1, -1, 1, -1, -1, 1
+  ]);
+  buf = webgl.createBuffer();
+  webgl.bindBuffer(webgl.ARRAY_BUFFER, buf);
+  webgl.bufferData(webgl.ARRAY_BUFFER, dat, webgl.STATIC_DRAW);
+  webgl.vertexAttribPointer(po, 3, webgl.FLOAT, false, 0, 0);
+
+  //指定顶点颜色的数据源
+  tmp = [[1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 0], [1, 0, 1], [0, 1, 1]]; //六种颜色
+  for (dat = [], i = 0; i < tmp.length; i++)//每一种颜色的顶点有4个
+    for (j = 0; j < 4; j++)dat.push.apply(dat, tmp[i]);
+  dat = new Float32Array(dat);
+  buf = webgl.createBuffer();
+  webgl.bindBuffer(webgl.ARRAY_BUFFER, buf);
+  webgl.bufferData(webgl.ARRAY_BUFFER, dat, webgl.STATIC_DRAW);
+  webgl.vertexAttribPointer(co, 3, webgl.FLOAT, false, 0, 0);
+
+  //uniform参数相关
+  var pro, rot, mov;
+
+  //获取uniform们的句柄
+  pro = webgl.getUniformLocation(program, "pro");
+  rot = webgl.getUniformLocation(program, "rot");
+  mov = webgl.getUniformLocation(program, "mov");
+
+  //设置投射矩阵
+  webgl.uniformMatrix4fv(
+      pro, false, (function (a, r, n, f) {
+        //参数分别是：视角、区域宽高比、近平面、远平面
+        a = 1 / Math.tan(a * Math.PI / 360);
+        return [
+          a / r, 0, 0, 0, 0, a, 0, 0, 0, 0, -(f + n) / (f - n), -1, 0, 0, -2 * f * n / (f - n), 0
+        ];
+      })(100, canvas.width / canvas.height, 1, 180)
+  );
+
+  //设置移动矩阵（向z方向移动-10）
+  webgl.uniformMatrix4fv(
+      mov, false, new TransformMatrix3D().translate(0, 0, -10, 1).toArray()
+  );
+
+  //构造索引
+  for (dat = [], i = 0; i < 24; i += 4)dat.push(i + 0, i + 1, i + 3, i + 3, i + 2, i + 1);
+  dat = new Uint16Array(dat);
+  buf = webgl.createBuffer();
+  webgl.bindBuffer(webgl.ELEMENT_ARRAY_BUFFER, buf);
+  webgl.bufferData(webgl.ELEMENT_ARRAY_BUFFER, dat, webgl.STATIC_DRAW);
+
+  //开启深度测试
+  webgl.enable(webgl.DEPTH_TEST);
+
+  //绘制过程
+  var a = 0;
+  setInterval(function () {
+    a -= 2;
+    webgl.uniformMatrix4fv(rot, false, new TransformMatrix3D(4).rotateZ(a, 1).rotateX(a, 1).toArray());
+    webgl.drawElements(webgl.TRIANGLES, 36, webgl.UNSIGNED_SHORT, 0);
+  }, 16);
+
+
+  // 绑定移动事件
+  var x = 0;
+  var y = 0;
+  var lookAtUp = null;
+  var lookAtDown = null;
+  var lookAtLeft = null;
+  var lookAtRight = null;
+
+  document.onkeydown = function (event) {
+    var currKey = 0, event = event || event;
+    currKey = event.keyCode || event.which || event.charCode;
+    if (currKey == 38) {
+      if (lookAtUp) return false;
+      lookAtUp = setInterval(function () {
+        webgl.uniformMatrix4fv(mov, false, new TransformMatrix3D().translate(y, x, -10, 1).toArray());
+        x -= 0.1;
+      }, 16);
+    } else if (currKey == 40) {
+      if (lookAtDown) return false;
+      lookAtDown = setInterval(function () {
+        webgl.uniformMatrix4fv(mov, false, new TransformMatrix3D().translate(y, x, -10, 1).toArray());
+        x += 0.1;
+      }, 16);
+    } else if (currKey == 37) {
+      if (lookAtLeft) return false;
+      lookAtLeft = setInterval(function () {
+        webgl.uniformMatrix4fv(mov, false, new TransformMatrix3D().translate(y, x, -10, 1).toArray());
+        y += 0.1;
+      }, 16);
+    } else if (currKey == 39) {
+      if (lookAtRight) return false;
+      lookAtRight = setInterval(function () {
+        webgl.uniformMatrix4fv(mov, false, new TransformMatrix3D().translate(y, x, -10, 1).toArray());
+        y -= 0.1;
+      }, 16);
+    }
+  };
+
+  document.onkeyup = function (event) {
+    var currKey = 0, event = event || event;
+    currKey = event.keyCode || event.which || event.charCode;
+    if (currKey == 38) {
+      if (!lookAtUp) return false;
+      clearInterval(lookAtUp);
+      lookAtUp = null;
+    } else if (currKey == 40) {
+      if (!lookAtDown) return false;
+      clearInterval(lookAtDown);
+      lookAtDown = null;
+    } else if (currKey == 37) {
+      if (!lookAtLeft) return false;
+      clearInterval(lookAtLeft);
+      lookAtLeft = null;
+    } else if (currKey == 39) {
+      if (!lookAtRight) return false;
+      clearInterval(lookAtRight);
+      lookAtRight = null;
+    }
+
+  };
+</script>
+</body>

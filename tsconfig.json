@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "es5",
+    "module": "commonjs",
+    "noImplicitAny": true,
+    "removeComments": true,
+    "sourceMap": true,
+    "declaration": true,
+    "experimentalDecorators": true
+  },
+  "exclude": [
+    "node_modules",
+    "bower_components",
+    "jspm_packages"
+  ],
+  "files": [
+    "src/assets/js/index.ts"
+  ]
+}
